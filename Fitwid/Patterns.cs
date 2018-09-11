@@ -17,27 +17,29 @@ namespace Fitwid {
 				text.Memoization.ContainsKey((sub, text.Start))
 					? text.Memoization[(sub, text.Start)]
 					: text.Memoization[(sub, text.Start)] = sub(text);
+
+		static readonly (Bobbin, dynamic)? None = null;
 		
 		public static Pattern End() =>
-			text => text.Length == 0 ? (text, null) : ((Bobbin, dynamic)?) null;
+			text => text.Length == 0 ? (text, null) : None;
 
 		public static Pattern PositiveLookahead(Pattern sub) =>
-			Cache(sub, text => sub(text) != null ? (text, null) : ((Bobbin, dynamic)?) null);
+			text => sub(text) != null ? (text, null) : None;
 		
 		public static Pattern NegativeLookahead(Pattern sub) =>
-			Cache(sub, text => sub(text) == null ? (text, null) : ((Bobbin, dynamic)?) null);
+			text => sub(text) == null ? (text, null) : None;
 		
 		public static Pattern IgnoreLeadingWhitespace(Pattern sub) =>
-			Cache(sub, text => {
+			text => {
 				var i = text.Start;
 				for(; i < text.End; ++i)
 					if(!char.IsWhiteSpace(text.String[i]))
 						break;
 				return sub(text.Forward(i - text.Start));
-			});
+			};
 		
 		public static Pattern Sequence(params Pattern[] elems) =>
-			Cache(elems, text => {
+			text => {
 				var list = new List<dynamic>();
 				foreach(var elem in elems) {
 					var match = elem(text);
@@ -46,12 +48,12 @@ namespace Fitwid {
 					list.Add(match.Value.Item2);
 				}
 				return (text, list);
-			});
+			};
 		
-		public static Pattern Choice(params Pattern[] opt) => Cache(opt, text => opt.Select(x => x(text)).FirstOrDefault(x => x != null));
+		public static Pattern Choice(params Pattern[] opt) => text => opt.Select(x => x(text)).FirstOrDefault(x => x != null);
 
 		public static Pattern ZeroOrMore(Pattern sub) =>
-			Cache(sub, text => {
+			text => {
 				var list = new List<dynamic>();
 				while(text.Length != 0) {
 					var match = sub(text);
@@ -60,10 +62,10 @@ namespace Fitwid {
 					list.Add(match.Value.Item2);
 				}
 				return (text, list);
-			});
+			};
 
 		public static Pattern OneOrMore(Pattern sub) =>
-			Cache(sub, text => {
+			text => {
 				var list = new List<dynamic>();
 				while(text.Length != 0) {
 					var match = sub(text);
@@ -74,15 +76,15 @@ namespace Fitwid {
 
 				if(list.Count == 0) return null;
 				return (text, list);
-			});
+			};
 
 		public static Pattern Literal(string val) =>
-			Cache(val, text => text.ToString().StartsWith(val) ? (text.Forward(val.Length), val) : ((Bobbin, dynamic)?) null);
+			Cache(val, text => text.ToString().StartsWith(val) ? (text.Forward(val.Length), val) : None);
 
 		public static Pattern Regex(Regex regex) =>
 			Cache(regex, text => {
 				var match = regex.Match(text.String, text.Start);
-				return match.Success ? (text.Forward(match.Length), match.Value) : ((Bobbin, dynamic)?) null;
+				return match.Success ? (text.Forward(match.Length), match.Value) : None;
 			});
 	}
 }
