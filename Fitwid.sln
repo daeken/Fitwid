@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fitwid", "Fitwid\Fitwid.csp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{364F9007-02F8-4AF4-9438-8AEF4E64B54F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParserCompiler", "ParserCompiler\ParserCompiler.csproj", "{B11331E0-B9F3-4B1E-9B3A-FB35212E185D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{364F9007-02F8-4AF4-9438-8AEF4E64B54F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{364F9007-02F8-4AF4-9438-8AEF4E64B54F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{364F9007-02F8-4AF4-9438-8AEF4E64B54F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B11331E0-B9F3-4B1E-9B3A-FB35212E185D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B11331E0-B9F3-4B1E-9B3A-FB35212E185D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B11331E0-B9F3-4B1E-9B3A-FB35212E185D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B11331E0-B9F3-4B1E-9B3A-FB35212E185D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

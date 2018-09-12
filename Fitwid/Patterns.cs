@@ -20,7 +20,7 @@ namespace Fitwid {
 
 		static readonly (Bobbin, dynamic)? None = null;
 		
-		public static Pattern End() =>
+		public static readonly Pattern End =
 			text => text.Length == 0 ? (text, null) : None;
 
 		public static Pattern PositiveLookahead(Pattern sub) =>
@@ -49,6 +49,9 @@ namespace Fitwid {
 				}
 				return (text, list);
 			};
+
+		public static Pattern LooseSequence(params Pattern[] elems) =>
+			Sequence(elems.Select(IgnoreLeadingWhitespace).ToArray());
 		
 		public static Pattern Choice(params Pattern[] opt) => text => opt.Select(x => x(text)).FirstOrDefault(x => x != null);
 
@@ -83,8 +86,45 @@ namespace Fitwid {
 
 		public static Pattern Regex(Regex regex) =>
 			Cache(regex, text => {
-				var match = regex.Match(text.String, text.Start);
+				var match = regex.Match(text);
 				return match.Success ? (text.Forward(match.Length), match.Value) : None;
 			});
+
+		public static Pattern Regex(string regex) => Regex(new Regex(regex));
+
+		public class NamedAst {
+			public static readonly Stack<NamedAst> Context = new Stack<NamedAst>();
+			
+			public readonly string Name;
+			public dynamic Value;
+			public readonly Dictionary<string, dynamic> Elements = new Dictionary<string, dynamic>();
+
+			public NamedAst(string name) =>
+				Name = name;
+		}
+
+		public static Pattern NamedPattern(string name, Pattern sub) =>
+			text => {
+				var cur = new NamedAst(name);
+				NamedAst.Context.Push(cur);
+				var ret = sub(text);
+				NamedAst.Context.Pop();
+				if(ret == null) return null;
+				cur.Value = ret.Value.Item2;
+				return (ret.Value.Item1, cur);
+			};
+
+		public static Pattern Named(string name, Pattern sub) =>
+			text => {
+				var ret = sub(text);
+				var cur = NamedAst.Context.Peek();
+				if(ret == null) {
+					cur.Elements[name] = null;
+					return null;
+				}
+
+				cur.Elements[name] = ret.Value.Item2;
+				return ret;
+			};
 	}
 }

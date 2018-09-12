@@ -34,6 +34,23 @@ namespace Tests {
 			
 			Assert.Equal(grammar.Parse("foobar"), new List<string> { "foo", "bar" });
 			
+			Assert.Null(grammar.Parse("foo bar"));
+			Assert.Null(grammar.Parse(" foobar"));
+			Assert.Null(grammar.Parse("foobar "));
+			Assert.Null(grammar.Parse("foo"));
+			Assert.Null(grammar.Parse("bar"));
+			Assert.Null(grammar.Parse("foob"));
+		}
+
+		[Fact]
+		public void StringLooseSequence() {
+			var grammar = new Grammar(LooseSequence(Literal("foo"), Literal("bar")));
+			
+			Assert.Equal(grammar.Parse("foobar"), new List<string> { "foo", "bar" });
+			Assert.Equal(grammar.Parse("foo bar"), new List<string> { "foo", "bar" });
+			Assert.Equal(grammar.Parse(" foo bar"), new List<string> { "foo", "bar" });
+			
+			Assert.Null(grammar.Parse("foobar "));
 			Assert.Null(grammar.Parse("foo"));
 			Assert.Null(grammar.Parse("bar"));
 			Assert.Null(grammar.Parse("foob"));
