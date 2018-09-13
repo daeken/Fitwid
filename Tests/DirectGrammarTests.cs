@@ -162,5 +162,33 @@ namespace Tests {
 			Assert.Null(grammar.Parse("foobar"));
 			Assert.Null(grammar.Parse("foo"));
 		}
+
+		[Fact]
+		public void OptionalTest() {
+			var grammar = new Grammar(LooseSequence(Optional(Literal("foo")), Literal("bar")));
+			
+			Assert.Equal(grammar.Parse("foobar"), new List<string> { "foo", "bar" });
+			Assert.Equal(grammar.Parse("bar"), new List<string> { null, "bar" });
+			
+			Assert.Null(grammar.Parse("foo"));
+			Assert.Null(grammar.Parse("barbar"));
+		}
+
+		[Fact]
+		public void ForwardTest() {
+			var (expr, exprBody) = Forward();
+			var group = LooseSequence(Literal("("), expr, Literal(")"));
+			exprBody.Value = Choice(group, Literal("foo"));
+			var grammar = new Grammar(expr);
+			
+			Assert.Equal(grammar.Parse("foo"), "foo");
+			Assert.Equal(grammar.Parse("(foo)"), new List<string> { "(", "foo", ")" });
+			
+			Assert.Null(grammar.Parse("("));
+			Assert.Null(grammar.Parse("()"));
+			Assert.Null(grammar.Parse("(foofoo)"));
+			Assert.Null(grammar.Parse("(foo"));
+			Assert.Null(grammar.Parse("foo(foo)"));
+		}
 	}
 }

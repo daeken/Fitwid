@@ -55,6 +55,9 @@ namespace Fitwid {
 		
 		public static Pattern Choice(params Pattern[] opt) => text => opt.Select(x => x(text)).FirstOrDefault(x => x != null);
 
+		public static Pattern Optional(Pattern sub) =>
+			text => sub(text) ?? (text, null);
+
 		public static Pattern ZeroOrMore(Pattern sub) =>
 			text => {
 				var list = new List<dynamic>();
@@ -126,5 +129,14 @@ namespace Fitwid {
 				cur.Elements[name] = ret.Value.Item2;
 				return ret;
 			};
+
+		public class ForwardPattern {
+			public Pattern Value;
+		}
+
+		public static (Pattern, ForwardPattern) Forward() {
+			var holder = new ForwardPattern();
+			return (text => holder.Value(text), holder);
+		}
 	}
 }
