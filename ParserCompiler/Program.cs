@@ -3,15 +3,38 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Fitwid;
+using MoreLinq.Extensions;
 using PrettyPrinter;
 
 namespace ParserCompiler {
 	class Program {
+		static string CurrentRuleName;
+		static string ClassName;
+		static string StartRuleName;
+		
 		static void Main(string[] args) {
 			var ast = EbnfParser.Parse(File.ReadAllText("ebnfGrammar.ebnf"));
+			//((object) ast).Print();
 			if(ast == null)
 				return;
-			var deps = ast.Select(x => (x.Name, FindDeps(x.Expression).Distinct().ToList())).ToDictionary(x => x.Item1, x => x.Item2);
+
+			ClassName = args.Length == 0 ? "Ast" : args[0];
+			
+			Console.WriteLine($"public abstract partial class {ClassName} {{");
+			var byValue = new List<string>();
+			ast.Rules.ForEach(rule => {
+				Console.WriteLine($"\tpublic partial class {(string) rule.Name} : {ClassName} {{");
+				var names = GetNamedElements((EbnfParser) rule.Expression).ToList();
+				if(names.Count == 0) {
+					byValue.Add((string) rule.Name);
+					Console.WriteLine("\t\tpublic dynamic Value;");
+				} else
+					foreach(var name in names)
+						Console.WriteLine($"\t\tpublic dynamic {name};");
+				Console.WriteLine("\t}");
+			});
+			
+			var deps = ast.Rules.Select(x => ((string) x.Name, ((IEnumerable<string>) FindDeps(x.Expression)).Distinct().ToList())).ToDictionary(x => x.Item1, x => x.Item2);
 			var order = new List<string>();
 			var forward = new List<string>();
 
@@ -25,36 +48,54 @@ namespace ParserCompiler {
 				}
 				order.Add(name);
 			}
-			BuildOrder(ast[0].Name, new List<string>());
+
+			StartRuleName = (string) ast.Rules[0].Name;
+			BuildOrder(StartRuleName, new List<string>());
+			Console.WriteLine("\tstatic readonly Grammar Grammar;");
+			Console.WriteLine($"\tstatic {ClassName}() {{");
 			foreach(var elem in forward)
-				Console.WriteLine($"var (_{elem}, __{elem}_body) = Patterns.Forward();");
+				Console.WriteLine($"\t\tvar (_{elem}, __{elem}_body) = Patterns.Forward();");
 			foreach(var elem in order) {
-				var body = $"Patterns.Memoize(Patterns.NamedPattern({elem.ToPrettyString()}, {Generate(ast.First(x => x.Name == elem).Expression)}))";
+				CurrentRuleName = elem;
+				var body = Generate(ast.Rules.First(x => x.Name == elem).Expression);
+				if(byValue.Contains(elem))
+					body = $"Patterns.With<{ClassName}.{elem}>((x, d) => x.Value = d, {body})";
+				body = $"Patterns.Memoize(Patterns.Bind<{ClassName}.{elem}>({body}))";
 				if(forward.Contains(elem))
-					Console.WriteLine($"__{elem}_body.Value = {body};");
+					Console.WriteLine($"\t\t__{elem}_body.Value = {body};");
 				else
-					Console.WriteLine($"var _{elem} = {body};");
+					Console.WriteLine($"\t\tvar _{elem} = {body};");
 			}
+			Console.WriteLine($"\t\tGrammar = new Grammar(_{StartRuleName});");
+			Console.WriteLine("\t}");
+			Console.WriteLine($"\tpublic static {ClassName}.{StartRuleName} Parse(string input) => ({ClassName}.{StartRuleName}) Grammar.Parse(input);");
+			Console.WriteLine("}");
 		}
 
-		static string Generate(EbnfParser.EbnfExpression expr) {
+		static string Generate(EbnfParser expr) {
 			switch(expr) {
-				case EbnfParser.EbnfChoice c: return $"Patterns.IgnoreLeadingWhitespace(Patterns.Choice({string.Join(", ", c.Choices.Select(Generate))}))";
-				case EbnfParser.EbnfSequence s: return $"Patterns.LooseSequence({string.Join(", ", s.Items.Select(Generate))})";
-				case EbnfParser.EbnfElement e: return e.Name != null ? $"Patterns.Named({e.Name.ToPrettyString()}, {Generate(e.Expression)})" : Generate(e.Expression);
-				case EbnfParser.EbnfIdentifier i: return "_" + i.Name;
-				case EbnfParser.EbnfOptional o: return $"Patterns.IgnoreLeadingWhitespace(Patterns.Optional({Generate(o.Expression)}))";
-				case EbnfParser.EbnfRegex r:
-					var regex = r.Raw.Substring(1);
+				case EbnfParser.Expression e: return Generate(e.Value);
+				case EbnfParser.Group g: return Generate(g.Expression);
+				case EbnfParser.Choice c: return $"Patterns.IgnoreLeadingWhitespace(Patterns.Choice({string.Join(", ", c.Choices.Select(Generate))}))";
+				case EbnfParser.Sequence s: return s.Items.Count == 1 ? Generate(s.Items[0]) : $"Patterns.LooseSequence({string.Join(", ", s.Items.Select(Generate))})";
+				case EbnfParser.Element e:
+					var body = Generate(e.Body);
+					if(e.Modifiers is EbnfParser.ZeroOrMore)
+						body = $"Patterns.ZeroOrMore(Patterns.IgnoreLeadingWhitespace({body}))";
+					else if(e.Modifiers is EbnfParser.OneOrMore)
+						body = $"Patterns.OneOrMore(Patterns.IgnoreLeadingWhitespace({body}))";
+					return e.Name != null ? $"Patterns.With<{ClassName}.{CurrentRuleName}>((x, d) => x.{(string) e.Name[0]} = d, {body})" : body;
+				case EbnfParser.Identifier i: return "_" + i;
+				case EbnfParser.Optional o: return $"Patterns.IgnoreLeadingWhitespace(Patterns.Optional({Generate(o.Expression)}))";
+				case EbnfParser.RegexLiteral r:
+					var regex = ((string) r.Value).Substring(1);
 					var mpos = regex.LastIndexOf('/');
 					// TODO: Process the modifiers and put them into the regex pattern
 					regex = regex.Substring(0, mpos);
 					return $"Patterns.IgnoreLeadingWhitespace(Patterns.Regex({UnescapeRegex(regex)}))";
-				case EbnfParser.EbnfString s: return $"Patterns.IgnoreLeadingWhitespace(Patterns.Literal({UnescapeString(s.Raw)}))";
-				case EbnfParser.EbnfOneOrMore o: return $"Patterns.OneOrMore({Generate(o.Element)})";
-				case EbnfParser.EbnfZeroOrMore o: return $"Patterns.ZeroOrMore({Generate(o.Element)})";
-				case EbnfParser.EbnfEnd e: return "Patterns.IgnoreLeadingWhitespace(Patterns.End)";
-				default: throw new NotImplementedException();
+				case EbnfParser.StringLiteral s: return $"Patterns.IgnoreLeadingWhitespace(Patterns.Literal({UnescapeString((string) s.Value)}))";
+				case EbnfParser.End e: return "Patterns.IgnoreLeadingWhitespace(Patterns.End)";
+				default: throw new NotImplementedException(expr.ToPrettyString());
 			}
 		}
 
@@ -105,19 +146,36 @@ namespace ParserCompiler {
 			return ret.ToPrettyString();
 		}
 
-		static IEnumerable<string> FindDeps(EbnfParser.EbnfExpression expr) {
+		static IEnumerable<string> FindDeps(EbnfParser expr) {
 			switch(expr) {
-				case EbnfParser.EbnfChoice c: return c.Choices.Select(FindDeps).SelectMany(x => x);
-				case EbnfParser.EbnfSequence s: return s.Items.Select(FindDeps).SelectMany(x => x);
-				case EbnfParser.EbnfElement e: return FindDeps(e.Expression);
-				case EbnfParser.EbnfIdentifier i: return new[] { i.Name };
-				case EbnfParser.EbnfOptional o: return FindDeps(o.Expression);
-				case EbnfParser.EbnfRegex r: return new string[0];
-				case EbnfParser.EbnfString s: return new string[0];
-				case EbnfParser.EbnfOneOrMore o: return FindDeps(o.Element);
-				case EbnfParser.EbnfZeroOrMore o: return FindDeps(o.Element);
-				case EbnfParser.EbnfEnd e: return new string[0];
-				default: throw new NotImplementedException();
+				case EbnfParser.Expression e: return FindDeps(e.Value);
+				case EbnfParser.Group g: return FindDeps(g.Expression);
+				case EbnfParser.Choice c: return c.Choices.Select(FindDeps).SelectMany(x => x);
+				case EbnfParser.Sequence s: return s.Items.Select(FindDeps).SelectMany(x => x);
+				case EbnfParser.Element e: return FindDeps(e.Body);
+				case EbnfParser.Identifier i: return new string[] { i };
+				case EbnfParser.Optional o: return FindDeps(o.Expression);
+				case EbnfParser.RegexLiteral r: return new string[0];
+				case EbnfParser.StringLiteral s: return new string[0];
+				case EbnfParser.End e: return new string[0];
+				default: throw new NotImplementedException(expr.ToPrettyString());
+			}
+		}
+
+		static IEnumerable<string> GetNamedElements(EbnfParser expr) {
+			switch(expr) {
+				case EbnfParser.Expression e: return GetNamedElements(e.Value);
+				case EbnfParser.Choice c: return c.Choices.Select(GetNamedElements).SelectMany(x => x);
+				case EbnfParser.Sequence s: return s.Items.Select(GetNamedElements).SelectMany(x => x);
+				case EbnfParser.Element e when e.Name != null: return new[] { (string) e.Name[0] }.Concat(GetNamedElements((EbnfParser) e.Body));
+				case EbnfParser.Element e: return GetNamedElements((EbnfParser) e.Body);
+				case EbnfParser.Identifier i: return new string[0];
+				case EbnfParser.Optional o: return GetNamedElements(o.Expression);
+				case EbnfParser.RegexLiteral r: return new string[0];
+				case EbnfParser.StringLiteral s: return new string[0];
+				case EbnfParser.Group g: return GetNamedElements(g.Expression);
+				case EbnfParser.End e: return new string[0];
+				default: throw new NotImplementedException(expr.ToPrettyString());
 			}
 		}
 	}

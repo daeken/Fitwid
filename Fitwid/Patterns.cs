@@ -138,5 +138,25 @@ namespace Fitwid {
 			var holder = new ForwardPattern();
 			return (text => holder.Value(text), holder);
 		}
+		
+		static readonly Stack<object> BindStack = new Stack<object>();
+
+		public static Pattern Bind<T>(Pattern sub) where T : new() =>
+			text => {
+				var obj = new T();
+				BindStack.Push(obj);
+				var ret = sub(text);
+				BindStack.Pop();
+				if(ret == null) return null;
+				return (ret.Value.Item1, obj);
+			};
+
+		public static Pattern With<T>(Action<T, dynamic> setter, Pattern sub) =>
+			text => {
+				var ret = sub(text);
+				if(ret == null) return null;
+				setter((T) BindStack.Peek(), ret.Value.Item2);
+				return ret;
+			};
 	}
 }
