@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using PrettyPrinter;
-using static Fitwid.Patterns;
 
 namespace Fitwid {
 	public class EbnfParser {
@@ -28,6 +27,8 @@ namespace Fitwid {
 		public class EbnfIdentifier : EbnfExpression {
 			public string Name;
 		}
+		
+		public class EbnfEnd : EbnfExpression {}
 
 		public class EbnfString : EbnfExpression {
 			public string Raw;
@@ -53,24 +54,21 @@ namespace Fitwid {
 		static readonly Grammar Grammar;
 
 		static EbnfParser() {
-			var Identifier = Regex("^[a-zA-Z_][a-zA-Z0-9_]*");
-			var DblQuoteStringLiteral = Sequence(Literal("\""), Regex(@"^([^""\n]|\\""|\\)*"), Literal("\""));
-			var SingleQuoteStringLiteral = Sequence(Literal("'"), Regex(@"^([^'\\\n]|\\'|\\\\)*"), Literal("'"));
-			var StringLiteral = NamedPattern("StringLiteral", Choice(DblQuoteStringLiteral, SingleQuoteStringLiteral));
-			var RegexLiteral = NamedPattern("RegexLiteral", Sequence(Literal("/"), Regex(@"^(\\/|\\\\|[^/\n])*"), Literal("/")));
-			var (Expression, ExpressionBody) = Forward();
-			var GroupSyntax = NamedPattern("Group", LooseSequence(Literal("("), Named("Expression", Expression), Literal(")")));
-			var OptionalSyntax = NamedPattern("Optional", LooseSequence(Literal("["), Named("Expression", Expression), Literal("]")));
-			var Element = NamedPattern("Element", LooseSequence(
-				Named("Name", Optional(LooseSequence(Identifier, Literal(":")))), 
-				Named("Body", Choice(GroupSyntax, OptionalSyntax, NamedPattern("RuleReference", Identifier), StringLiteral, RegexLiteral)), 
-				Named("Modifiers", Optional(Choice(Literal("*"), Literal("+"))))
-			));
-			var SequenceSyntax = NamedPattern("SequenceSyntax", OneOrMore(IgnoreLeadingWhitespace(Element)));
-			var ChoiceSyntax = NamedPattern("ChoiceSyntax", LooseSequence(SequenceSyntax, OneOrMore(LooseSequence(Literal("|"), SequenceSyntax))));
-			ExpressionBody.Value = Choice(ChoiceSyntax, SequenceSyntax);
-			var Rule = NamedPattern("Rule", LooseSequence(Named("Name", Identifier), Literal("="), Named("Expression", Expression), Literal(";")));
-			var _Start = LooseSequence(ZeroOrMore(Rule), End);
+			var (_Expression, __Expression_body) = Patterns.Forward();
+			var _Identifier = Patterns.Memoize(Patterns.NamedPattern("Identifier", Patterns.IgnoreLeadingWhitespace(Patterns.Regex("^[a-zA-Z_][a-zA-Z0-9_]*"))));
+			var _Group = Patterns.Memoize(Patterns.NamedPattern("Group", Patterns.LooseSequence(Patterns.IgnoreLeadingWhitespace(Patterns.Literal("(")), Patterns.Named("Expression", _Expression), Patterns.IgnoreLeadingWhitespace(Patterns.Literal(")")))));
+			var _Optional = Patterns.Memoize(Patterns.NamedPattern("Optional", Patterns.LooseSequence(Patterns.IgnoreLeadingWhitespace(Patterns.Literal("[")), Patterns.Named("Expression", _Expression), Patterns.IgnoreLeadingWhitespace(Patterns.Literal("]")))));
+			var _StringLiteral = Patterns.Memoize(Patterns.NamedPattern("StringLiteral", Patterns.IgnoreLeadingWhitespace(Patterns.Choice(Patterns.IgnoreLeadingWhitespace(Patterns.Regex("^\"([^\"\n]|\\\\\"|\\\\)*\"")), Patterns.IgnoreLeadingWhitespace(Patterns.Regex("^'([^'\n]|\\\\'|\\\\)*'"))))));
+			var _RegexLiteral = Patterns.Memoize(Patterns.NamedPattern("RegexLiteral", Patterns.IgnoreLeadingWhitespace(Patterns.Regex("^/(\\\\/|\\\\\\\\|[^/\n])+/[imsx]*"))));
+			var _End = Patterns.Memoize(Patterns.NamedPattern("End", Patterns.IgnoreLeadingWhitespace(Patterns.Literal("$"))));
+			var _ZeroOrMore = Patterns.Memoize(Patterns.NamedPattern("ZeroOrMore", Patterns.IgnoreLeadingWhitespace(Patterns.Literal("*"))));
+			var _OneOrMore = Patterns.Memoize(Patterns.NamedPattern("OneOrMore", Patterns.IgnoreLeadingWhitespace(Patterns.Literal("+"))));
+			var _Element = Patterns.Memoize(Patterns.NamedPattern("Element", Patterns.LooseSequence(Patterns.Named("Name", Patterns.IgnoreLeadingWhitespace(Patterns.Optional(Patterns.LooseSequence(_Identifier, Patterns.IgnoreLeadingWhitespace(Patterns.Literal(":")))))), Patterns.Named("Body", Patterns.IgnoreLeadingWhitespace(Patterns.Choice(_Group, _Optional, _Identifier, _StringLiteral, _RegexLiteral, _End))), Patterns.Named("Modifiers", Patterns.IgnoreLeadingWhitespace(Patterns.Optional(Patterns.IgnoreLeadingWhitespace(Patterns.Choice(_ZeroOrMore, _OneOrMore))))))));
+			var _Sequence = Patterns.Memoize(Patterns.NamedPattern("Sequence", Patterns.OneOrMore(_Element)));
+			var _Choice = Patterns.Memoize(Patterns.NamedPattern("Choice", Patterns.LooseSequence(_Sequence, Patterns.OneOrMore(Patterns.LooseSequence(Patterns.IgnoreLeadingWhitespace(Patterns.Literal("|")), _Sequence)))));
+			__Expression_body.Value = Patterns.Memoize(Patterns.NamedPattern("Expression", Patterns.IgnoreLeadingWhitespace(Patterns.Choice(_Choice, _Sequence))));
+			var _Rule = Patterns.Memoize(Patterns.NamedPattern("Rule", Patterns.LooseSequence(Patterns.Named("Name", _Identifier), Patterns.IgnoreLeadingWhitespace(Patterns.Literal("=")), Patterns.Named("Expression", _Expression), Patterns.IgnoreLeadingWhitespace(Patterns.Literal(";")))));
+			var _Start = Patterns.Memoize(Patterns.NamedPattern("Start", Patterns.LooseSequence(Patterns.ZeroOrMore(_Rule), Patterns.IgnoreLeadingWhitespace(Patterns.End))));
 			Grammar = new Grammar(_Start);
 		}
 
@@ -80,9 +78,9 @@ namespace Fitwid {
 
 			var rules = new List<EbnfRule>();
 
-			foreach(var elem in gast[0]) {
+			foreach(var elem in gast.Value[0]) {
 				rules.Add(new EbnfRule {
-					Name = (string) elem.Elements["Name"], 
+					Name = (string) elem.Elements["Name"].Value, 
 					Expression = ParseExpression(elem.Elements["Expression"])
 				});
 			}
@@ -90,30 +88,34 @@ namespace Fitwid {
 			return rules;
 		}
 
-		static EbnfExpression ParseExpression(NamedAst elem) {
+		static EbnfExpression ParseExpression(Patterns.NamedAst elem) {
 			switch(elem.Name) {
-				case "SequenceSyntax":
+				case "Expression":
+					return ParseExpression(elem.Value);
+				case "Sequence":
 					return ParseSequence(elem);
-				case "ChoiceSyntax":
+				case "Choice":
 					return ParseChoice(elem);
-				case "RuleReference":
+				case "Identifier":
 					return new EbnfIdentifier { Name = elem.Value };
 				case "StringLiteral":
-					return new EbnfString { Raw = string.Join("", elem.Value) };
+					return new EbnfString { Raw = elem.Value };
 				case "Group":
 					return ParseExpression(elem.Elements["Expression"]);
 				case "Optional":
 					return new EbnfOptional { Expression = ParseExpression(elem.Elements["Expression"]) };
 				case "RegexLiteral":
-					return new EbnfRegex { Raw = elem.Value[1] };
+					return new EbnfRegex { Raw = elem.Value };
+				case "End":
+					return new EbnfEnd();
 				default:
 					elem.Print();
 					return null;
 			}
 		}
 
-		static EbnfExpression ParseSequence(NamedAst elem) {
-			var sub = new List<NamedAst>();
+		static EbnfExpression ParseSequence(Patterns.NamedAst elem) {
+			var sub = new List<Patterns.NamedAst>();
 			foreach(var selem in elem.Value)
 				sub.Add(selem);
 			if(sub.Count == 1)
@@ -121,23 +123,23 @@ namespace Fitwid {
 			return new EbnfSequence { Items = sub.Select(ParseElement).ToList() };
 		}
 
-		static EbnfExpression ParseChoice(NamedAst elem) {
-			var sub = new List<NamedAst> { elem.Value[0] };
+		static EbnfExpression ParseChoice(Patterns.NamedAst elem) {
+			var sub = new List<Patterns.NamedAst> { elem.Value[0] };
 			foreach(var selem in elem.Value[1])
 				sub.Add(selem[1]);
 			return new EbnfChoice { Choices = sub.Select(ParseSequence).ToList() };
 		}
 
-		static EbnfExpression ParseElement(NamedAst elem) {
-			var expr = ParseExpression((NamedAst) elem.Elements["Body"]);
-			if(elem.Elements["Modifiers"] == "*")
+		static EbnfExpression ParseElement(Patterns.NamedAst elem) {
+			var expr = ParseExpression((Patterns.NamedAst) elem.Elements["Body"]);
+			if(elem.Elements["Modifiers"] != null && elem.Elements["Modifiers"].Name == "ZeroOrMore")
 				expr = new EbnfZeroOrMore { Element = expr };
-			else if(elem.Elements["Modifiers"] == "+")
+			else if(elem.Elements["Modifiers"] != null && elem.Elements["Modifiers"].Name == "OneOrMore")
 				expr = new EbnfOneOrMore { Element = expr };
 			return elem.Elements["Name"]?[0] == null
 				? expr
 				: new EbnfElement {
-					Name = (string) elem.Elements["Name"]?[0],
+					Name = (string) elem.Elements["Name"]?[0].Value,
 					Expression = expr
 				};
 		}
