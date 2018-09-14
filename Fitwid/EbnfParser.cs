@@ -4,7 +4,7 @@ using System.Linq;
 namespace Fitwid {
 	public partial class EbnfParser {
 		public partial class Start {
-			public IReadOnlyList<EbnfParser.Rule> Rules => ((IEnumerable<object>) Value[0]).Select(x => (EbnfParser.Rule) x).ToList();
+			public IReadOnlyList<EbnfParser.Rule> Rules => ((IEnumerable<object>) RuleDefs).Select(x => (EbnfParser.Rule) x).ToList();
 		}
 		
 		public partial class Choice {

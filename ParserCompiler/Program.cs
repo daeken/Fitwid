@@ -9,7 +9,7 @@ using PrettyPrinter;
 namespace ParserCompiler {
 	class Program {
 		static string CurrentRuleName;
-		static string ClassName;
+		static string ClassName = "Ast";
 		static string StartRuleName;
 		
 		static void Main(string[] args) {
@@ -18,20 +18,29 @@ namespace ParserCompiler {
 			if(ast == null)
 				return;
 
-			ClassName = args.Length == 0 ? "Ast" : args[0];
-			
-			Console.WriteLine($"public abstract partial class {ClassName} {{");
+			var ns = "Generated";
+			if(ast.TypeDecl != null) {
+				var td = (string) ((EbnfParser.TypeDecl) ast.TypeDecl).Name;
+				var i = td.LastIndexOf('.');
+				ClassName = i == -1 ? td : td.Substring(i + 1);
+				if(i != -1)
+					ns = td.Substring(0, i);
+			}
+
+			Console.WriteLine($"namespace {ns} {{");
+			Console.WriteLine($"\tpublic abstract partial class {ClassName} {{");
 			var byValue = new List<string>();
+			string NewIf(string name) => ast.Rules.Count(x => (string) x.Name == name) != 0 ? "new " : "";
 			ast.Rules.ForEach(rule => {
-				Console.WriteLine($"\tpublic partial class {(string) rule.Name} : {ClassName} {{");
+				Console.WriteLine($"\t\tpublic partial class {(string) rule.Name} : {ClassName} {{");
 				var names = GetNamedElements((EbnfParser) rule.Expression).ToList();
 				if(names.Count == 0) {
 					byValue.Add((string) rule.Name);
-					Console.WriteLine("\t\tpublic dynamic Value;");
+					Console.WriteLine($"\t\t\tpublic {NewIf("Value")}dynamic Value;");
 				} else
 					foreach(var name in names)
-						Console.WriteLine($"\t\tpublic dynamic {name};");
-				Console.WriteLine("\t}");
+						Console.WriteLine($"\t\t\tpublic {NewIf(name)}dynamic {name};");
+				Console.WriteLine("\t\t}");
 			});
 			
 			var deps = ast.Rules.Select(x => ((string) x.Name, ((IEnumerable<string>) FindDeps(x.Expression)).Distinct().ToList())).ToDictionary(x => x.Item1, x => x.Item2);
@@ -51,10 +60,10 @@ namespace ParserCompiler {
 
 			StartRuleName = (string) ast.Rules[0].Name;
 			BuildOrder(StartRuleName, new List<string>());
-			Console.WriteLine("\tstatic readonly Grammar Grammar;");
-			Console.WriteLine($"\tstatic {ClassName}() {{");
+			Console.WriteLine("\t\tstatic readonly Grammar Grammar;");
+			Console.WriteLine($"\t\tstatic {ClassName}() {{");
 			foreach(var elem in forward)
-				Console.WriteLine($"\t\tvar (_{elem}, __{elem}_body) = Patterns.Forward();");
+				Console.WriteLine($"\t\t\tvar (_{elem}, __{elem}_body) = Patterns.Forward();");
 			foreach(var elem in order) {
 				CurrentRuleName = elem;
 				var body = Generate(ast.Rules.First(x => x.Name == elem).Expression);
@@ -62,13 +71,14 @@ namespace ParserCompiler {
 					body = $"Patterns.With<{ClassName}.{elem}>((x, d) => x.Value = d, {body})";
 				body = $"Patterns.Memoize(Patterns.Bind<{ClassName}.{elem}>({body}))";
 				if(forward.Contains(elem))
-					Console.WriteLine($"\t\t__{elem}_body.Value = {body};");
+					Console.WriteLine($"\t\t\t__{elem}_body.Value = {body};");
 				else
-					Console.WriteLine($"\t\tvar _{elem} = {body};");
+					Console.WriteLine($"\t\t\tvar _{elem} = {body};");
 			}
-			Console.WriteLine($"\t\tGrammar = new Grammar(_{StartRuleName});");
+			Console.WriteLine($"\t\t\tGrammar = new Grammar(_{StartRuleName});");
+			Console.WriteLine("\t\t}");
+			Console.WriteLine($"\t\tpublic static {ClassName}.{StartRuleName} Parse(string input) => ({ClassName}.{StartRuleName}) Grammar.Parse(input);");
 			Console.WriteLine("\t}");
-			Console.WriteLine($"\tpublic static {ClassName}.{StartRuleName} Parse(string input) => ({ClassName}.{StartRuleName}) Grammar.Parse(input);");
 			Console.WriteLine("}");
 		}
 

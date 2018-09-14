@@ -1,16 +1,15 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using PrettyPrinter;
-
 namespace Fitwid {
 	public abstract partial class EbnfParser {
 		public partial class Start : EbnfParser {
-			public dynamic Value;
+			public new dynamic TypeDecl;
+			public dynamic RuleDefs;
+		}
+		public partial class TypeDecl : EbnfParser {
+			public dynamic Name;
 		}
 		public partial class Rule : EbnfParser {
 			public dynamic Name;
-			public dynamic Expression;
+			public new dynamic Expression;
 		}
 		public partial class Expression : EbnfParser {
 			public dynamic Value;
@@ -30,10 +29,10 @@ namespace Fitwid {
 			public dynamic Value;
 		}
 		public partial class Group : EbnfParser {
-			public dynamic Expression;
+			public new dynamic Expression;
 		}
 		public partial class Optional : EbnfParser {
-			public dynamic Expression;
+			public new dynamic Expression;
 		}
 		public partial class Identifier : EbnfParser {
 			public dynamic Value;
@@ -53,6 +52,7 @@ namespace Fitwid {
 		static readonly Grammar Grammar;
 		static EbnfParser() {
 			var (_Expression, __Expression_body) = Patterns.Forward();
+			var _TypeDecl = Patterns.Memoize(Patterns.Bind<EbnfParser.TypeDecl>(Patterns.LooseSequence(Patterns.IgnoreLeadingWhitespace(Patterns.Literal("%class")), Patterns.With<EbnfParser.TypeDecl>((x, d) => x.Name = d, Patterns.IgnoreLeadingWhitespace(Patterns.Regex("^[a-zA-Z_][a-zA-Z0-9_.]*"))), Patterns.IgnoreLeadingWhitespace(Patterns.Literal(";")))));
 			var _Identifier = Patterns.Memoize(Patterns.Bind<EbnfParser.Identifier>(Patterns.With<EbnfParser.Identifier>((x, d) => x.Value = d, Patterns.IgnoreLeadingWhitespace(Patterns.Regex("^[a-zA-Z_][a-zA-Z0-9_]*")))));
 			var _Group = Patterns.Memoize(Patterns.Bind<EbnfParser.Group>(Patterns.LooseSequence(Patterns.IgnoreLeadingWhitespace(Patterns.Literal("(")), Patterns.With<EbnfParser.Group>((x, d) => x.Expression = d, _Expression), Patterns.IgnoreLeadingWhitespace(Patterns.Literal(")")))));
 			var _Optional = Patterns.Memoize(Patterns.Bind<EbnfParser.Optional>(Patterns.LooseSequence(Patterns.IgnoreLeadingWhitespace(Patterns.Literal("[")), Patterns.With<EbnfParser.Optional>((x, d) => x.Expression = d, _Expression), Patterns.IgnoreLeadingWhitespace(Patterns.Literal("]")))));
@@ -66,7 +66,7 @@ namespace Fitwid {
 			var _Choice = Patterns.Memoize(Patterns.Bind<EbnfParser.Choice>(Patterns.With<EbnfParser.Choice>((x, d) => x.Value = d, Patterns.LooseSequence(_Sequence, Patterns.OneOrMore(Patterns.IgnoreLeadingWhitespace(Patterns.LooseSequence(Patterns.IgnoreLeadingWhitespace(Patterns.Literal("|")), _Sequence)))))));
 			__Expression_body.Value = Patterns.Memoize(Patterns.Bind<EbnfParser.Expression>(Patterns.With<EbnfParser.Expression>((x, d) => x.Value = d, Patterns.IgnoreLeadingWhitespace(Patterns.Choice(_Choice, _Sequence)))));
 			var _Rule = Patterns.Memoize(Patterns.Bind<EbnfParser.Rule>(Patterns.LooseSequence(Patterns.With<EbnfParser.Rule>((x, d) => x.Name = d, _Identifier), Patterns.IgnoreLeadingWhitespace(Patterns.Literal("=")), Patterns.With<EbnfParser.Rule>((x, d) => x.Expression = d, _Expression), Patterns.IgnoreLeadingWhitespace(Patterns.Literal(";")))));
-			var _Start = Patterns.Memoize(Patterns.Bind<EbnfParser.Start>(Patterns.With<EbnfParser.Start>((x, d) => x.Value = d, Patterns.LooseSequence(Patterns.ZeroOrMore(Patterns.IgnoreLeadingWhitespace(_Rule)), Patterns.IgnoreLeadingWhitespace(Patterns.End)))));
+			var _Start = Patterns.Memoize(Patterns.Bind<EbnfParser.Start>(Patterns.LooseSequence(Patterns.With<EbnfParser.Start>((x, d) => x.TypeDecl = d, Patterns.IgnoreLeadingWhitespace(Patterns.Optional(_TypeDecl))), Patterns.With<EbnfParser.Start>((x, d) => x.RuleDefs = d, Patterns.ZeroOrMore(Patterns.IgnoreLeadingWhitespace(_Rule))), Patterns.IgnoreLeadingWhitespace(Patterns.End))));
 			Grammar = new Grammar(_Start);
 		}
 		public static EbnfParser.Start Parse(string input) => (EbnfParser.Start) Grammar.Parse(input);
