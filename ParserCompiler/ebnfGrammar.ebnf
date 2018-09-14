@@ -8,6 +8,6 @@ Group = '(' Expression ')';
 Optional = '[' Expression ']';
 Identifier = /[a-zA-Z_][a-zA-Z0-9_]*/;
 StringLiteral = /"([^"\n]|\\"|\\)*"/ | /'([^'\n]|\\'|\\)*'/;
-RegexLiteral = /\/([^\/\\\n]|\\\/|\\\\)*\/[imsx]/;
+RegexLiteral = /\/(\\\/|\\\\|[^\/\\\n])*\/[imsx]/;
 ZeroOrMore = '*';
 OneOrMore = '+';

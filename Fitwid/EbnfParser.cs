@@ -70,8 +70,8 @@ namespace Fitwid {
 			var ChoiceSyntax = NamedPattern("ChoiceSyntax", LooseSequence(SequenceSyntax, OneOrMore(LooseSequence(Literal("|"), SequenceSyntax))));
 			ExpressionBody.Value = Choice(ChoiceSyntax, SequenceSyntax);
 			var Rule = NamedPattern("Rule", LooseSequence(Named("Name", Identifier), Literal("="), Named("Expression", Expression), Literal(";")));
-			var Start = LooseSequence(ZeroOrMore(Rule), End);
-			Grammar = new Grammar(Start);
+			var _Start = LooseSequence(ZeroOrMore(Rule), End);
+			Grammar = new Grammar(_Start);
 		}
 
 		public static List<EbnfRule> Parse(string code) {
