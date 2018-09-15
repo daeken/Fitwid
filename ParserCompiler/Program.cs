@@ -97,7 +97,7 @@ namespace ParserCompiler {
 				Console.WriteLine($"\t\t\tvar (_{elem}, __{elem}_body) = Patterns.Forward();");
 			foreach(var elem in order) {
 				CurrentRuleName = elem;
-				var body = Generate(ast.Rules.First(x => x.Name == elem).Expression);
+				string body = Generate(ast.Rules.First(x => x.Name == elem).Expression);
 				var ptype = patternTypes[elem];
 				switch(ptype) {
 					case PatternType.Named:
@@ -107,7 +107,10 @@ namespace ParserCompiler {
 						body = $"Patterns.Bind<{ClassName}.{elem}>(Patterns.With<{ClassName}.{elem}>((x, d) => x.Value = d, {body}))";
 						break;
 					case PatternType.ValueOverride:
-						body = $"Patterns.PopValue({body})";
+						if(body.StartsWith("Patterns.PushValue("))
+							body = body.Substring(19, body.Length - 19 - 1);
+						else
+							body = $"Patterns.PopValue({body})";
 						break;
 					case PatternType.ValueList:
 						body = $"Patterns.ValueList({body})";
