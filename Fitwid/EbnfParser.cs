@@ -8,16 +8,12 @@ namespace Fitwid {
 		}
 		
 		public partial class Choice {
-			public IReadOnlyList<EbnfParser> Choices =>
-				new[] { (EbnfParser) Value[0] }.Concat(((IEnumerable<object>) Value[1]).Select(x => (EbnfParser) ((IReadOnlyList<object>) x)[1])).ToList();
+			public IReadOnlyList<EbnfParser> AstChoices =>
+				((IEnumerable<object>) Choices).Select(x => (EbnfParser) x).ToList();
 		}
 
 		public partial class Sequence {
 			public IReadOnlyList<EbnfParser> Items => ((IEnumerable<object>) Value).Select(x => (EbnfParser) x).ToList();
-		}
-
-		public partial class Identifier {
-			public static implicit operator string(Identifier identifier) => (string) identifier.Value;
 		}
 	}
 }

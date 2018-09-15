@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using PrettyPrinter;
 
 namespace Fitwid {
 	public static class Patterns {
@@ -52,14 +53,28 @@ namespace Fitwid {
 
 		public static Pattern LooseSequence(params Pattern[] elems) =>
 			Sequence(elems.Select(IgnoreLeadingWhitespace).ToArray());
+
+		public static Pattern SavePass(Pattern sub) =>
+			text => {
+				if(BindStack.Count == 0)
+					return sub(text);
+				var saved = BindStack.Pop();
+				BindStack.Push(saved.Copy());
+				var ret = sub(text);
+				if(ret != null) return ret;
+				BindStack.Pop();
+				BindStack.Push(saved);
+				return null;
+			};
 		
-		public static Pattern Choice(params Pattern[] opt) => text => opt.Select(x => x(text)).FirstOrDefault(x => x != null);
+		public static Pattern Choice(params Pattern[] opt) => text => opt.Select(x => SavePass(x)(text)).FirstOrDefault(x => x != null);
 
 		public static Pattern Optional(Pattern sub) =>
-			text => sub(text) ?? (text, null);
+			text => SavePass(sub)(text) ?? (text, null);
 
 		public static Pattern ZeroOrMore(Pattern sub) =>
 			text => {
+				sub = SavePass(sub);
 				var list = new List<dynamic>();
 				while(text.Length != 0) {
 					var match = sub(text);
@@ -72,6 +87,7 @@ namespace Fitwid {
 
 		public static Pattern OneOrMore(Pattern sub) =>
 			text => {
+				sub = SavePass(sub);
 				var list = new List<dynamic>();
 				while(text.Length != 0) {
 					var match = sub(text);
@@ -96,8 +112,6 @@ namespace Fitwid {
 		public static Pattern Regex(string regex) => Regex(new Regex(regex));
 
 		public class NamedAst {
-			public static readonly Stack<NamedAst> Context = new Stack<NamedAst>();
-			
 			public readonly string Name;
 			public dynamic Value;
 			public readonly Dictionary<string, dynamic> Elements = new Dictionary<string, dynamic>();
@@ -109,9 +123,9 @@ namespace Fitwid {
 		public static Pattern NamedPattern(string name, Pattern sub) =>
 			text => {
 				var cur = new NamedAst(name);
-				NamedAst.Context.Push(cur);
+				BindStack.Push(cur);
 				var ret = sub(text);
-				NamedAst.Context.Pop();
+				cur = (NamedAst) BindStack.Pop();
 				if(ret == null) return null;
 				cur.Value = ret.Value.Item2;
 				return (ret.Value.Item1, cur);
@@ -120,7 +134,7 @@ namespace Fitwid {
 		public static Pattern Named(string name, Pattern sub) =>
 			text => {
 				var ret = sub(text);
-				var cur = NamedAst.Context.Peek();
+				var cur = (NamedAst) BindStack.Peek();
 				if(ret == null) {
 					cur.Elements[name] = null;
 					return null;
@@ -146,7 +160,7 @@ namespace Fitwid {
 				var obj = new T();
 				BindStack.Push(obj);
 				var ret = sub(text);
-				BindStack.Pop();
+				obj = (T) BindStack.Pop();
 				if(ret == null) return null;
 				return (ret.Value.Item1, obj);
 			};
@@ -156,6 +170,41 @@ namespace Fitwid {
 				var ret = sub(text);
 				if(ret == null) return null;
 				setter((T) BindStack.Peek(), ret.Value.Item2);
+				return ret;
+			};
+		
+		public static Pattern PushValue(Pattern sub) =>
+			text => {
+				BindStack.Pop(); // Pop off old or null value
+				var ret = sub(text);
+				BindStack.Push(ret?.Item2);
+				return ret;
+			};
+
+		public static Pattern PopValue(Pattern sub) =>
+			text => {
+				BindStack.Push(null);
+				var ret = sub(text);
+				var value = BindStack.Pop();
+				if(ret == null) return null;
+				return (ret.Value.Item1, value);
+			};
+
+		public static Pattern ValueList(Pattern sub) =>
+			text => {
+				var value = new List<dynamic>();
+				BindStack.Push(value);
+				var ret = sub(text);
+				value = (List<dynamic>) BindStack.Pop();
+				if(ret == null) return null;
+				return (ret.Value.Item1, value);
+			};
+
+		public static Pattern AddValue(Pattern sub) =>
+			text => {
+				var ret = sub(text);
+				if(ret == null) return null;
+				((List<dynamic>) BindStack.Peek()).Add(ret.Value.Item2);
 				return ret;
 			};
 	}
