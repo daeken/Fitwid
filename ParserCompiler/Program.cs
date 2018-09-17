@@ -174,9 +174,9 @@ namespace ParserCompiler {
 				case EbnfParser.Element e:
 					var type = BuildType(e.Body);
 					var body = Generate(e.Body);
-					if(e.Modifiers is EbnfParser.ZeroOrMore)
+					if(e.Modifiers == "*")
 						body = $"Patterns.ZeroOrMore<{type}>(Patterns.IgnoreLeadingWhitespace({body}))";
-					else if(e.Modifiers is EbnfParser.OneOrMore)
+					else if(e.Modifiers == "+")
 						body = $"Patterns.OneOrMore<{type}>(Patterns.IgnoreLeadingWhitespace({body}))";
 					var name = e.Name;
 					switch(name) {
@@ -271,7 +271,7 @@ namespace ParserCompiler {
 					return $"({string.Join(", ", s.Items.Select(BuildType))})";
 				case EbnfParser.Element e:
 					var type = BuildType(e.Body);
-					if(e.Modifiers is EbnfParser.ZeroOrMore || e.Modifiers is EbnfParser.OneOrMore)
+					if(e.Modifiers == "*" || e.Modifiers == "+")
 						type = $"List<{type}>";
 					return type;
 				case EbnfParser.RuleReference r: return RuleTypes[r.Name];
