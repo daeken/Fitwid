@@ -4,7 +4,7 @@ namespace Fitwid {
 	public abstract partial class EbnfParser {
 		public partial class Start : EbnfParser {
 			public new EbnfParser.TypeDecl TypeDecl;
-			public List<EbnfParser.Rule> RuleDefs;
+			public List<EbnfParser.Rule> Rules;
 		}
 		public partial class TypeDecl : EbnfParser {
 			public string Name;
@@ -17,7 +17,7 @@ namespace Fitwid {
 			public List<EbnfParser.Sequence> Choices;
 		}
 		public partial class Sequence : EbnfParser {
-			public List<EbnfParser.Element> Value;
+			public List<EbnfParser.Element> Items;
 		}
 		public partial class Element : EbnfParser {
 			public string Name;
@@ -60,11 +60,11 @@ namespace Fitwid {
 			var _ZeroOrMore = Patterns.Memoize(Patterns.Bind<EbnfParser.ZeroOrMore>(Patterns.With<EbnfParser.ZeroOrMore>((x, d) => x.Value = d, Patterns.IgnoreLeadingWhitespace(Patterns.Literal("*")))));
 			var _OneOrMore = Patterns.Memoize(Patterns.Bind<EbnfParser.OneOrMore>(Patterns.With<EbnfParser.OneOrMore>((x, d) => x.Value = d, Patterns.IgnoreLeadingWhitespace(Patterns.Literal("+")))));
 			var _Element = Patterns.Memoize(Patterns.Bind<EbnfParser.Element>(Patterns.TupleLooseSequence(new[] { typeof(string), typeof(EbnfParser), typeof(EbnfParser)  }, Patterns.With<EbnfParser.Element>((x, d) => x.Name = d, Patterns.IgnoreLeadingWhitespace(Patterns.Optional(_ElementIdentifier))), Patterns.With<EbnfParser.Element>((x, d) => x.Body = d, Patterns.IgnoreLeadingWhitespace(Patterns.Choice(_Group, _Optional, _RuleReference, _StringLiteral, _RegexLiteral, _End))), Patterns.With<EbnfParser.Element>((x, d) => x.Modifiers = d, Patterns.IgnoreLeadingWhitespace(Patterns.Optional(Patterns.IgnoreLeadingWhitespace(Patterns.Choice(_ZeroOrMore, _OneOrMore))))))));
-			var _Sequence = Patterns.Memoize(Patterns.Bind<EbnfParser.Sequence>(Patterns.With<EbnfParser.Sequence>((x, d) => x.Value = d, Patterns.OneOrMore<EbnfParser.Element>(Patterns.IgnoreLeadingWhitespace(_Element)))));
+			var _Sequence = Patterns.Memoize(Patterns.Bind<EbnfParser.Sequence>(Patterns.With<EbnfParser.Sequence>((x, d) => x.Items = d, Patterns.OneOrMore<EbnfParser.Element>(Patterns.IgnoreLeadingWhitespace(_Element)))));
 			var _Choice = Patterns.Memoize(Patterns.Bind<EbnfParser.Choice>(Patterns.TupleLooseSequence(new[] { typeof(EbnfParser.Sequence), typeof(List<(string, EbnfParser.Sequence)>)  }, Patterns.With<EbnfParser.Choice>((x, d) => (x.Choices = x.Choices ?? new List<EbnfParser.Sequence>()).Add(d), _Sequence), Patterns.OneOrMore<(string, EbnfParser.Sequence)>(Patterns.IgnoreLeadingWhitespace(Patterns.TupleLooseSequence(new[] { typeof(string), typeof(EbnfParser.Sequence)  }, Patterns.IgnoreLeadingWhitespace(Patterns.Literal("|")), Patterns.With<EbnfParser.Choice>((x, d) => (x.Choices = x.Choices ?? new List<EbnfParser.Sequence>()).Add(d), _Sequence)))))));
 			__Expression_body.Value = Patterns.Memoize(Patterns.IgnoreLeadingWhitespace(Patterns.Choice(_Choice, _Sequence)));
 			var _Rule = Patterns.Memoize(Patterns.Bind<EbnfParser.Rule>(Patterns.TupleLooseSequence(new[] { typeof(string), typeof(string), typeof(EbnfParser), typeof(string)  }, Patterns.With<EbnfParser.Rule>((x, d) => x.Name = d, _Identifier), Patterns.IgnoreLeadingWhitespace(Patterns.Literal("=")), Patterns.With<EbnfParser.Rule>((x, d) => x.Expression = d, _Expression), Patterns.IgnoreLeadingWhitespace(Patterns.Literal(";")))));
-			var _Start = Patterns.Memoize(Patterns.Bind<EbnfParser.Start>(Patterns.TupleLooseSequence(new[] { typeof(EbnfParser.TypeDecl), typeof(List<EbnfParser.Rule>), typeof(object)  }, Patterns.With<EbnfParser.Start>((x, d) => x.TypeDecl = d, Patterns.IgnoreLeadingWhitespace(Patterns.Optional(_TypeDecl))), Patterns.With<EbnfParser.Start>((x, d) => x.RuleDefs = d, Patterns.ZeroOrMore<EbnfParser.Rule>(Patterns.IgnoreLeadingWhitespace(_Rule))), Patterns.IgnoreLeadingWhitespace(Patterns.End))));
+			var _Start = Patterns.Memoize(Patterns.Bind<EbnfParser.Start>(Patterns.TupleLooseSequence(new[] { typeof(EbnfParser.TypeDecl), typeof(List<EbnfParser.Rule>), typeof(object)  }, Patterns.With<EbnfParser.Start>((x, d) => x.TypeDecl = d, Patterns.IgnoreLeadingWhitespace(Patterns.Optional(_TypeDecl))), Patterns.With<EbnfParser.Start>((x, d) => x.Rules = d, Patterns.ZeroOrMore<EbnfParser.Rule>(Patterns.IgnoreLeadingWhitespace(_Rule))), Patterns.IgnoreLeadingWhitespace(Patterns.End))));
 			Grammar = new Grammar(_Start);
 		}
 		public static EbnfParser.Start Parse(string input) => (EbnfParser.Start) Grammar.Parse(input);

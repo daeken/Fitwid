@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Fitwid;
-using MoreLinq.Extensions;
 using PrettyPrinter;
 
 namespace ParserCompiler {
@@ -23,7 +22,6 @@ namespace ParserCompiler {
 		
 		static void Main(string[] args) {
 			var ast = EbnfParser.Parse(File.ReadAllText(args[0]));
-			//((object) ast).Print();
 			if(ast == null)
 				return;
 
@@ -152,7 +150,7 @@ namespace ParserCompiler {
 
 		static EbnfParser.Element FindElement(string name, EbnfParser expr) {
 			switch(expr) {
-				case EbnfParser.Choice c: return c.AstChoices.Select(x => FindElement(name, x)).FirstOrDefault(x => x != null);
+				case EbnfParser.Choice c: return c.Choices.Select(x => FindElement(name, x)).FirstOrDefault(x => x != null);
 				case EbnfParser.Sequence s: return s.Items.Select(x => FindElement(name, x)).FirstOrDefault(x => x != null);
 				case EbnfParser.Element e: return e.Name == name ? e : FindElement(name, e.Body);
 				case EbnfParser.Optional o: return FindElement(name, o.Expression);
@@ -167,7 +165,7 @@ namespace ParserCompiler {
 
 		static string Generate(EbnfParser expr) {
 			switch(expr) {
-				case EbnfParser.Choice c: return $"Patterns.IgnoreLeadingWhitespace(Patterns.Choice({string.Join(", ", c.AstChoices.Select(Generate))}))";
+				case EbnfParser.Choice c: return $"Patterns.IgnoreLeadingWhitespace(Patterns.Choice({string.Join(", ", c.Choices.Select(Generate))}))";
 				case EbnfParser.Sequence s: return s.Items.Count == 1 ? Generate(s.Items[0]) : $"Patterns.TupleLooseSequence(new[] {{ {string.Join(", ", s.Items.Select(x => $"typeof({BuildType(x)})"))}  }}, {string.Join(", ", s.Items.Select(Generate))})";
 				case EbnfParser.Element e:
 					var type = BuildType(e.Body);
@@ -255,7 +253,7 @@ namespace ParserCompiler {
 		static string BuildType(EbnfParser expr) {
 			switch(expr) {
 				case EbnfParser.Choice c: {
-					var choices = c.AstChoices.Select(BuildType).ToList();
+					var choices = c.Choices.Select(BuildType).ToList();
 					var first = choices.First();
 					if(choices.Any(x => x != first)) {
 						if(first == "string" || choices.Any(x => x == "string"))
@@ -283,7 +281,7 @@ namespace ParserCompiler {
 
 		static IEnumerable<string> FindDeps(EbnfParser expr) {
 			switch(expr) {
-				case EbnfParser.Choice c: return c.AstChoices.Select(FindDeps).SelectMany(x => x);
+				case EbnfParser.Choice c: return c.Choices.Select(FindDeps).SelectMany(x => x);
 				case EbnfParser.Sequence s: return s.Items.Select(FindDeps).SelectMany(x => x);
 				case EbnfParser.Element e: return FindDeps(e.Body);
 				case EbnfParser.RuleReference r: return new[] { r.Name };
@@ -297,7 +295,7 @@ namespace ParserCompiler {
 
 		static IEnumerable<string> GetNamedElements(EbnfParser expr) {
 			switch(expr) {
-				case EbnfParser.Choice c: return c.AstChoices.Select(GetNamedElements).SelectMany(x => x);
+				case EbnfParser.Choice c: return c.Choices.Select(GetNamedElements).SelectMany(x => x);
 				case EbnfParser.Sequence s: return s.Items.Select(GetNamedElements).SelectMany(x => x);
 				case EbnfParser.Element e when e.Name != null: return new[] { e.Name }.Concat(GetNamedElements(e.Body));
 				case EbnfParser.Element e: return GetNamedElements(e.Body);

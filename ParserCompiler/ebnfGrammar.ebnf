@@ -1,11 +1,11 @@
 %class Fitwid.EbnfParser;
 
-Start = TypeDecl:[TypeDecl] RuleDefs:Rule* $;
+Start = TypeDecl:[TypeDecl] Rules:Rule* $;
 TypeDecl = '%class' Name:/[a-zA-Z_][a-zA-Z0-9_.]*/ ';';
 Rule = Name:Identifier '=' Expression:Expression ';';
 Expression = @:(Choice | Sequence);
 Choice = Choices+:Sequence ('|' Choices+:Sequence)+;
-Sequence = Element+;
+Sequence = Items:Element+;
 Element = Name:[ElementIdentifier] Body:(Group | Optional | RuleReference | StringLiteral | RegexLiteral | End) Modifiers:[ZeroOrMore | OneOrMore];
 RuleReference = Name:Identifier;
 End = '$';
