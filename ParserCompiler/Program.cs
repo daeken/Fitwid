@@ -44,7 +44,7 @@ namespace ParserCompiler {
 			ast.Rules.ForEach(rule => {
 				var ruleName = rule.Name;
 				var names = GetNamedElements(rule.Expression).Distinct().ToList();
-				if(names.Contains("@"))
+				if(names.Contains("@") || rule.Operator == ":=")
 					patternTypes[ruleName] = PatternType.ValueOverride;
 				else if(names.Contains("@+"))
 					patternTypes[ruleName] = PatternType.ValueList;
@@ -58,7 +58,10 @@ namespace ParserCompiler {
 						RuleTypes[ruleName] = $"{ClassName}.{ruleName}";
 						break;
 					case PatternType.ValueOverride:
-						RuleTypes[ruleName] = BuildType(FindElement("@", rule.Expression));
+						if(rule.Operator == ":=")
+							RuleTypes[ruleName] = BuildType(rule.Expression);
+						else
+							RuleTypes[ruleName] = BuildType(FindElement("@", rule.Expression));
 						break;
 					case PatternType.ValueList:
 						RuleTypes[ruleName] = $"List<{BuildType(FindElement("@+", rule.Expression))}>";
@@ -115,7 +118,8 @@ namespace ParserCompiler {
 				Console.WriteLine($"\t\t\tvar (_{elem}, __{elem}_body) = Patterns.Forward();");
 			foreach(var elem in order) {
 				CurrentRuleName = elem;
-				string body = Generate(ast.Rules.First(x => x.Name == elem).Expression);
+				var rule = ast.Rules.First(x => x.Name == elem);
+				string body = Generate(rule.Expression);
 				var ptype = patternTypes[elem];
 				switch(ptype) {
 					case PatternType.Named:
@@ -127,7 +131,7 @@ namespace ParserCompiler {
 					case PatternType.ValueOverride:
 						if(body.StartsWith("Patterns.PushValue("))
 							body = body.Substring(19, body.Length - 19 - 1);
-						else
+						else if(rule.Operator != ":=")
 							body = $"Patterns.PopValue({body})";
 						break;
 					case PatternType.ValueList:
