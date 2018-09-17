@@ -54,8 +54,20 @@ namespace Fitwid {
 		public static Pattern LooseSequence(params Pattern[] elems) =>
 			Sequence(elems.Select(IgnoreLeadingWhitespace).ToArray());
 
-		public static Pattern TupleSequence(Type[] types, params Pattern[] elems) =>
-			text => {
+		public static Pattern TupleSequence(Type[] types, params Pattern[] elems) {
+			Type tupleType;
+			switch(types.Length) {
+				case 2: tupleType = typeof(ValueTuple<,>); break;
+				case 3: tupleType = typeof(ValueTuple<,,>); break;
+				case 4: tupleType = typeof(ValueTuple<,,,>); break;
+				case 5: tupleType = typeof(ValueTuple<,,,,>); break;
+				case 6: tupleType = typeof(ValueTuple<,,,,,>); break;
+				case 7: tupleType = typeof(ValueTuple<,,,,,,>); break;
+				case 8: tupleType = typeof(ValueTuple<,,,,,,,>); break;
+				default: throw new NotImplementedException();
+			}
+			
+			return text => {
 				var list = new List<dynamic>();
 				foreach(var elem in elems) {
 					var match = elem(text);
@@ -64,20 +76,9 @@ namespace Fitwid {
 					list.Add(match.Value.Item2);
 				}
 
-				Type tupleType = null;
-				switch(types.Length) {
-					case 2: tupleType = typeof(ValueTuple<,>); break;
-					case 3: tupleType = typeof(ValueTuple<,,>); break;
-					case 4: tupleType = typeof(ValueTuple<,,,>); break;
-					case 5: tupleType = typeof(ValueTuple<,,,,>); break;
-					case 6: tupleType = typeof(ValueTuple<,,,,,>); break;
-					case 7: tupleType = typeof(ValueTuple<,,,,,,>); break;
-					case 8: tupleType = typeof(ValueTuple<,,,,,,,>); break;
-					default: throw new NotImplementedException();
-				}
-				
 				return (text, Activator.CreateInstance(tupleType.MakeGenericType(types), list.ToArray()));
 			};
+		}
 
 		public static Pattern TupleLooseSequence(Type[] types, params Pattern[] elems) =>
 			TupleSequence(types, elems.Select(IgnoreLeadingWhitespace).ToArray());
