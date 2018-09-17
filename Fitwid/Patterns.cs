@@ -54,6 +54,34 @@ namespace Fitwid {
 		public static Pattern LooseSequence(params Pattern[] elems) =>
 			Sequence(elems.Select(IgnoreLeadingWhitespace).ToArray());
 
+		public static Pattern TupleSequence(Type[] types, params Pattern[] elems) =>
+			text => {
+				var list = new List<dynamic>();
+				foreach(var elem in elems) {
+					var match = elem(text);
+					if(match == null) return null;
+					text = match.Value.Item1;
+					list.Add(match.Value.Item2);
+				}
+
+				Type tupleType = null;
+				switch(types.Length) {
+					case 2: tupleType = typeof(ValueTuple<,>); break;
+					case 3: tupleType = typeof(ValueTuple<,,>); break;
+					case 4: tupleType = typeof(ValueTuple<,,,>); break;
+					case 5: tupleType = typeof(ValueTuple<,,,,>); break;
+					case 6: tupleType = typeof(ValueTuple<,,,,,>); break;
+					case 7: tupleType = typeof(ValueTuple<,,,,,,>); break;
+					case 8: tupleType = typeof(ValueTuple<,,,,,,,>); break;
+					default: throw new NotImplementedException();
+				}
+				
+				return (text, Activator.CreateInstance(tupleType.MakeGenericType(types), list.ToArray()));
+			};
+
+		public static Pattern TupleLooseSequence(Type[] types, params Pattern[] elems) =>
+			TupleSequence(types, elems.Select(IgnoreLeadingWhitespace).ToArray());
+
 		public static Pattern SavePass(Pattern sub) =>
 			text => {
 				if(BindStack.Count == 0)
@@ -84,11 +112,39 @@ namespace Fitwid {
 				}
 				return (text, list);
 			};
-
+		
+		public static Pattern ZeroOrMore<T>(Pattern sub) =>
+			text => {
+				sub = SavePass(sub);
+				var list = new List<T>();
+				while(text.Length != 0) {
+					var match = sub(text);
+					if(match == null) break;
+					text = match.Value.Item1;
+					list.Add(match.Value.Item2);
+				}
+				return (text, list);
+			};
+		
 		public static Pattern OneOrMore(Pattern sub) =>
 			text => {
 				sub = SavePass(sub);
 				var list = new List<dynamic>();
+				while(text.Length != 0) {
+					var match = sub(text);
+					if(match == null) break;
+					text = match.Value.Item1;
+					list.Add(match.Value.Item2);
+				}
+
+				if(list.Count == 0) return null;
+				return (text, list);
+			};
+
+		public static Pattern OneOrMore<T>(Pattern sub) =>
+			text => {
+				sub = SavePass(sub);
+				var list = new List<T>();
 				while(text.Length != 0) {
 					var match = sub(text);
 					if(match == null) break;

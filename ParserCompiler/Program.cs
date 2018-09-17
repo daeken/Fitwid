@@ -18,6 +18,8 @@ namespace ParserCompiler {
 		static string CurrentRuleName;
 		static string ClassName = "Ast";
 		static string StartRuleName;
+
+		static Dictionary<string, string> RuleTypes = new Dictionary<string, string>();
 		
 		static void Main(string[] args) {
 			var ast = EbnfParser.Parse(File.ReadAllText(args[0]));
@@ -27,21 +29,23 @@ namespace ParserCompiler {
 
 			var ns = "Generated";
 			if(ast.TypeDecl != null) {
-				var td = (string) ((EbnfParser.TypeDecl) ast.TypeDecl).Name;
+				var td = ast.TypeDecl.Name;
 				var i = td.LastIndexOf('.');
 				ClassName = i == -1 ? td : td.Substring(i + 1);
 				if(i != -1)
 					ns = td.Substring(0, i);
 			}
 
-			Console.WriteLine($"using System.Collections.Generic;");
+			Console.WriteLine("using Fitwid;");
+			Console.WriteLine("using System.Collections.Generic;");
 			Console.WriteLine($"namespace {ns} {{");
 			Console.WriteLine($"\tpublic abstract partial class {ClassName} {{");
 			var patternNameDeps = new Dictionary<string, List<string>>();
 			var patternTypes = new Dictionary<string, PatternType>();
+			ast.Rules.ForEach(rule => RuleTypes[rule.Name] = ClassName);
 			ast.Rules.ForEach(rule => {
-				var ruleName = (string) rule.Name;
-				var names = GetNamedElements((EbnfParser) rule.Expression).Distinct().ToList();
+				var ruleName = rule.Name;
+				var names = GetNamedElements(rule.Expression).Distinct().ToList();
 				if(names.Contains("@"))
 					patternTypes[ruleName] = PatternType.ValueOverride;
 				else if(names.Contains("@+"))
@@ -49,32 +53,48 @@ namespace ParserCompiler {
 				else
 					patternTypes[ruleName] = names.Count == 0 ? PatternType.ByValue : PatternType.Named;
 				patternNameDeps[ruleName] = names;
+
+				switch(patternTypes[ruleName]) {
+					case PatternType.Named:
+					case PatternType.ByValue:
+						RuleTypes[ruleName] = $"{ClassName}.{ruleName}";
+						break;
+					case PatternType.ValueOverride:
+						RuleTypes[ruleName] = BuildType(FindElement("@", rule.Expression));
+						break;
+					case PatternType.ValueList:
+						RuleTypes[ruleName] = $"List<{BuildType(FindElement("@+", rule.Expression))}>";
+						break;
+				}
 			});
 
 			string NewIf(string name) => ast.Rules.Count(x =>
-				                             (string) x.Name == name && patternTypes[name] != PatternType.ValueList &&
+				                             x.Name == name && patternTypes[name] != PatternType.ValueList &&
 				                             patternTypes[name] != PatternType.ValueOverride) != 0
 				? "new "
 				: "";
 			ast.Rules.ForEach(rule => {
-				var ruleName = (string) rule.Name;
+				var ruleName = rule.Name;
 				if(patternTypes[ruleName] == PatternType.ValueList ||
 				   patternTypes[ruleName] == PatternType.ValueOverride)
 					return;
 				var names = patternNameDeps[ruleName];
-				Console.WriteLine($"\t\tpublic partial class {(string) rule.Name} : {ClassName} {{");
+				Console.WriteLine($"\t\tpublic partial class {rule.Name} : {ClassName} {{");
 				if(names.Count == 0)
-					Console.WriteLine($"\t\t\tpublic {NewIf("Value")}dynamic Value;");
+					Console.WriteLine($"\t\t\tpublic {NewIf("Value")}{BuildType(rule.Expression)} Value;");
 				else
 					foreach(var _name in names) {
 						var name = _name.EndsWith("+") ? _name.Substring(0, _name.Length - 1) : _name;
-						Console.WriteLine($"\t\t\tpublic {NewIf(name)}dynamic {name};");
+						var type = BuildType(FindElement(_name, rule.Expression));
+						if(_name.EndsWith("+"))
+							type = $"List<{type}>";
+						Console.WriteLine($"\t\t\tpublic {NewIf(name)}{type} {name};");
 					}
 
 				Console.WriteLine("\t\t}");
 			});
 			
-			var deps = ast.Rules.Select(x => ((string) x.Name, ((IEnumerable<string>) FindDeps(x.Expression)).Distinct().ToList())).ToDictionary(x => x.Item1, x => x.Item2);
+			var deps = ast.Rules.Select(x => (x.Name, FindDeps(x.Expression).Distinct().ToList())).ToDictionary(x => x.Item1, x => x.Item2);
 			var order = new List<string>();
 			var forward = new List<string>();
 
@@ -89,7 +109,7 @@ namespace ParserCompiler {
 				order.Add(name);
 			}
 
-			StartRuleName = (string) ast.Rules[0].Name;
+			StartRuleName = ast.Rules[0].Name;
 			BuildOrder(StartRuleName, new List<string>());
 			Console.WriteLine("\t\tstatic readonly Grammar Grammar;");
 			Console.WriteLine($"\t\tstatic {ClassName}() {{");
@@ -130,17 +150,33 @@ namespace ParserCompiler {
 			Console.WriteLine("}");
 		}
 
+		static EbnfParser.Element FindElement(string name, EbnfParser expr) {
+			switch(expr) {
+				case EbnfParser.Choice c: return c.AstChoices.Select(x => FindElement(name, x)).FirstOrDefault(x => x != null);
+				case EbnfParser.Sequence s: return s.Items.Select(x => FindElement(name, x)).FirstOrDefault(x => x != null);
+				case EbnfParser.Element e: return e.Name == name ? e : FindElement(name, e.Body);
+				case EbnfParser.Optional o: return FindElement(name, o.Expression);
+				case EbnfParser.RuleReference _:
+				case EbnfParser.RegexLiteral _:
+				case EbnfParser.StringLiteral _:
+				case EbnfParser.End _:
+					return null;
+				default: throw new NotImplementedException(expr.ToPrettyString());
+			}
+		}
+
 		static string Generate(EbnfParser expr) {
 			switch(expr) {
 				case EbnfParser.Choice c: return $"Patterns.IgnoreLeadingWhitespace(Patterns.Choice({string.Join(", ", c.AstChoices.Select(Generate))}))";
-				case EbnfParser.Sequence s: return s.Items.Count == 1 ? Generate(s.Items[0]) : $"Patterns.LooseSequence({string.Join(", ", s.Items.Select(Generate))})";
+				case EbnfParser.Sequence s: return s.Items.Count == 1 ? Generate(s.Items[0]) : $"Patterns.TupleLooseSequence(new[] {{ {string.Join(", ", s.Items.Select(x => $"typeof({BuildType(x)})"))}  }}, {string.Join(", ", s.Items.Select(Generate))})";
 				case EbnfParser.Element e:
+					var type = BuildType(e.Body);
 					var body = Generate(e.Body);
 					if(e.Modifiers is EbnfParser.ZeroOrMore)
-						body = $"Patterns.ZeroOrMore(Patterns.IgnoreLeadingWhitespace({body}))";
+						body = $"Patterns.ZeroOrMore<{type}>(Patterns.IgnoreLeadingWhitespace({body}))";
 					else if(e.Modifiers is EbnfParser.OneOrMore)
-						body = $"Patterns.OneOrMore(Patterns.IgnoreLeadingWhitespace({body}))";
-					var name = e.Name != null ? (string) e.Name : null;
+						body = $"Patterns.OneOrMore<{type}>(Patterns.IgnoreLeadingWhitespace({body}))";
+					var name = e.Name;
 					switch(name) {
 						case "@":
 							return $"Patterns.PushValue({body})";
@@ -150,7 +186,7 @@ namespace ParserCompiler {
 							return body;
 						case string _ when name.EndsWith("+"):
 							name = name.Substring(0, name.Length - 1);
-							return $"Patterns.With<{ClassName}.{CurrentRuleName}>((x, d) => (x.{name} = x.{name} ?? new List<dynamic>()).Add(d), {body})";
+							return $"Patterns.With<{ClassName}.{CurrentRuleName}>((x, d) => (x.{name} = x.{name} ?? new List<{type}>()).Add(d), {body})";
 						default:
 							return
 								$"Patterns.With<{ClassName}.{CurrentRuleName}>((x, d) => x.{name} = d, {body})";
@@ -158,12 +194,12 @@ namespace ParserCompiler {
 				case EbnfParser.RuleReference r: return "_" + r.Name;
 				case EbnfParser.Optional o: return $"Patterns.IgnoreLeadingWhitespace(Patterns.Optional({Generate(o.Expression)}))";
 				case EbnfParser.RegexLiteral r:
-					var regex = ((string) r.Value).Substring(1);
+					var regex = r.Value.Substring(1);
 					var mpos = regex.LastIndexOf('/');
 					// TODO: Process the modifiers and put them into the regex pattern
 					regex = regex.Substring(0, mpos);
 					return $"Patterns.IgnoreLeadingWhitespace(Patterns.Regex({UnescapeRegex(regex)}))";
-				case EbnfParser.StringLiteral s: return $"Patterns.IgnoreLeadingWhitespace(Patterns.Literal({UnescapeString((string) s.Value)}))";
+				case EbnfParser.StringLiteral s: return $"Patterns.IgnoreLeadingWhitespace(Patterns.Literal({UnescapeString(s.Value)}))";
 				case EbnfParser.End e: return "Patterns.IgnoreLeadingWhitespace(Patterns.End)";
 				default: throw new NotImplementedException(expr.ToPrettyString());
 			}
@@ -216,12 +252,41 @@ namespace ParserCompiler {
 			return ret.ToPrettyString();
 		}
 
+		static string BuildType(EbnfParser expr) {
+			switch(expr) {
+				case EbnfParser.Choice c: {
+					var choices = c.AstChoices.Select(BuildType).ToList();
+					var first = choices.First();
+					if(choices.Any(x => x != first)) {
+						if(first == "string" || choices.Any(x => x == "string"))
+							throw new NotImplementedException();
+						return ClassName;
+					}
+					return first;
+				}
+				case EbnfParser.Sequence s:
+					if(s.Items.Count == 1) return BuildType(s.Items[0]);
+					return $"({string.Join(", ", s.Items.Select(BuildType))})";
+				case EbnfParser.Element e:
+					var type = BuildType(e.Body);
+					if(e.Modifiers is EbnfParser.ZeroOrMore || e.Modifiers is EbnfParser.OneOrMore)
+						type = $"List<{type}>";
+					return type;
+				case EbnfParser.RuleReference r: return RuleTypes[r.Name];
+				case EbnfParser.Optional o: return BuildType(o.Expression);
+				case EbnfParser.RegexLiteral r: return "string";
+				case EbnfParser.StringLiteral s: return "string";
+				case EbnfParser.End e: return "object";
+				default: throw new NotImplementedException(expr.ToPrettyString());
+			}
+		}
+
 		static IEnumerable<string> FindDeps(EbnfParser expr) {
 			switch(expr) {
 				case EbnfParser.Choice c: return c.AstChoices.Select(FindDeps).SelectMany(x => x);
 				case EbnfParser.Sequence s: return s.Items.Select(FindDeps).SelectMany(x => x);
 				case EbnfParser.Element e: return FindDeps(e.Body);
-				case EbnfParser.RuleReference r: return new string[] { r.Name };
+				case EbnfParser.RuleReference r: return new[] { r.Name };
 				case EbnfParser.Optional o: return FindDeps(o.Expression);
 				case EbnfParser.RegexLiteral r: return new string[0];
 				case EbnfParser.StringLiteral s: return new string[0];
@@ -234,8 +299,8 @@ namespace ParserCompiler {
 			switch(expr) {
 				case EbnfParser.Choice c: return c.AstChoices.Select(GetNamedElements).SelectMany(x => x);
 				case EbnfParser.Sequence s: return s.Items.Select(GetNamedElements).SelectMany(x => x);
-				case EbnfParser.Element e when e.Name != null: return new[] { (string) e.Name }.Concat(GetNamedElements((EbnfParser) e.Body));
-				case EbnfParser.Element e: return GetNamedElements((EbnfParser) e.Body);
+				case EbnfParser.Element e when e.Name != null: return new[] { e.Name }.Concat(GetNamedElements(e.Body));
+				case EbnfParser.Element e: return GetNamedElements(e.Body);
 				case EbnfParser.Optional o: return GetNamedElements(o.Expression);
 				case EbnfParser.RuleReference r: return new string[0];
 				case EbnfParser.RegexLiteral r: return new string[0];
